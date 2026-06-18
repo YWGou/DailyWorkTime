@@ -805,6 +805,8 @@
     const STORAGE_KEY = "daily-work-time-records-v2";
     const LEGACY_STORAGE_KEY = "daily-work-time-records-v1";
     const USER_IDS = ["me", "friend"];
+    const DAY_END_TIME = "23:59";
+    const DAY_END_MINUTES = 23 * 60 + 59;
     const DEFAULT_DAY = {
       targets: [
         { hours: 4, minutes: 0 },
@@ -989,14 +991,34 @@
       return timeToMinutes(getCurrentTimeValue());
     }
 
-    function durationForEntry(entry) {
+    function autoCloseExpiredEntries(day, dateKey) {
+      if (dateKey >= toDateKey(new Date())) return false;
+
+      const entry = day.entries[day.entries.length - 1];
+      if (entry && timeToMinutes(entry.start) !== null && !entry.end) {
+        entry.end = DAY_END_TIME;
+        return true;
+      }
+      return false;
+    }
+
+    function runningEndMinutesForDate(dateKey) {
+      const today = toDateKey(new Date());
+      if (dateKey < today) return DAY_END_MINUTES;
+      if (dateKey > today) return null;
+      return getCurrentMinutes();
+    }
+
+    function durationForEntry(entry, dateKey = activeDate, isLastEntry = false) {
       const start = timeToMinutes(entry.start);
       const end = timeToMinutes(entry.end);
       if (start === null) return { valid: false, minutes: 0, message: "待补全" };
       if (end === null && !entry.end) {
-        const current = getCurrentMinutes();
-        if (current < start) return { valid: false, minutes: 0, message: "请修正" };
-        const minutes = current - start;
+        if (!isLastEntry) return { valid: false, minutes: 0, message: "待补全" };
+        const runningEnd = runningEndMinutesForDate(dateKey);
+        if (runningEnd === null) return { valid: false, minutes: 0, message: "待补全" };
+        if (runningEnd < start) return { valid: false, minutes: 0, message: "请修正" };
+        const minutes = runningEnd - start;
         return { valid: true, running: true, minutes, message: `进行中 · ${formatDuration(minutes)}` };
       }
       if (end === null) return { valid: false, minutes: 0, message: "待补全" };
@@ -1033,8 +1055,11 @@
       return `距离${targetLabel}${percent}%`;
     }
 
-    function calculateDay(day) {
-      const durations = day.entries.map(durationForEntry);
+    function calculateDay(day, dateKey = activeDate) {
+      const lastIndex = day.entries.length - 1;
+      const durations = day.entries.map((entry, index) =>
+        durationForEntry(entry, dateKey, index === lastIndex)
+      );
       const total = durations.reduce((sum, item) => sum + (item.valid ? item.minutes : 0), 0);
       const validCount = durations.filter((item) => item.valid && item.minutes > 0).length;
       const runningCount = durations.filter((item) => item.running).length;
@@ -1053,6 +1078,8 @@
 
     function render() {
       const day = getDay();
+      const changed = autoCloseExpiredEntries(day, activeDate);
+      if (changed) saveRecords();
       const result = calculateDay(day);
       elements.datePicker.value = activeDate;
       elements.weekdayLabel.textContent = formatWeekday(activeDate);
@@ -1168,7 +1195,7 @@
 
       dates.forEach((dateKey) => {
         const day = getDay(dateKey);
-        const result = calculateDay(day);
+        const result = calculateDay(day, dateKey);
         const item = document.createElement("button");
         item.className = "archive-item";
         item.type = "button";
@@ -1188,8 +1215,8 @@
     }
 
     function renderComparison() {
-      const meResult = calculateDay(readDay(activeDate, "me"));
-      const friendResult = calculateDay(readDay(activeDate, "friend"));
+      const meResult = calculateDay(readDay(activeDate, "me"), activeDate);
+      const friendResult = calculateDay(readDay(activeDate, "friend"), activeDate);
       const difference = Math.abs(meResult.total - friendResult.total);
       const meName = getUserName("me");
       const friendName = getUserName("friend");

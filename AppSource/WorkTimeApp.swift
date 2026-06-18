@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKScript
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureMainMenu()
+        configureApplicationIcon()
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
@@ -20,13 +21,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKScript
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1180, height: 780),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "DailyWorkTime"
-        window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = false
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
+        window.isMovable = true
+        window.isMovableByWindowBackground = true
         window.minSize = NSSize(width: 760, height: 560)
         window.center()
         window.contentView = webView
@@ -71,6 +74,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKScript
         editMenuItem.submenu = editMenu
 
         NSApp.mainMenu = mainMenu
+    }
+
+    private func configureApplicationIcon() {
+        guard let iconURL = Bundle.main.url(forResource: "DailyWorkTimeIconV2", withExtension: "icns"),
+              let icon = NSImage(contentsOf: iconURL) else {
+            return
+        }
+        NSApp.applicationIconImage = icon
     }
 
     private func loadInterface() {
